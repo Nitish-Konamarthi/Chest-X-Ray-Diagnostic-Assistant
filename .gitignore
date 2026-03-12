@@ -1,0 +1,10 @@
+# Ignore all images
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tif
+*.tiff
+
+# Ignore dataset folders if needed

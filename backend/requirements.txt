@@ -1,0 +1,14 @@
+streamlit
+torch
+torchvision
+pillow
+numpy
+pandas
+opencv-python-headless
+uvicorn
+fastapi
+scikit-learn
+python-multipart
+python-dotenv
+google-genai
+requests
