@@ -2,15 +2,18 @@
 FastAPI Backend for Chest X-ray Analysis
 =========================================
 
-Migrated from Streamlit for better performance and latency.
-Provides REST API for image analysis with binary pipeline validation.
+ENHANCED VERSION with:
+- Modified decision flow: Normal → Health tips; Abnormal → CheXNet analysis
+- Geoapify integration for finding nearby specialized doctors
+- Gemini 2.0 Flash for AI explanations
 
 Endpoints:
 - POST /analyze: Upload X-ray image and get analysis results
+- POST /find-doctors: Find nearby doctors based on location and pathology
 - GET /health: Health check
 
 Usage:
-    uvicorn fastapi_app:app --reload --host 0.0.0.0 --port 8000
+    uvicorn app:app --reload --host 0.0.0.0 --port 8000
 """
 
 import io
@@ -25,7 +28,7 @@ import torch.nn as nn
 import torchvision.transforms as T
 from PIL import Image
 import numpy as np
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv, find_dotenv
@@ -49,6 +52,7 @@ try:
     from src.HeatmapGenerator import generate_gradcam
     from src.binary_pipeline import BinaryClassifierPipeline
     from src.explainability_ai import explainability_ai
+    from src.geoapify_service import geoapify_finder  # NEW IMPORT
 except Exception as e:
     print(f"Import error: {e}")
     raise
@@ -66,7 +70,10 @@ CLINICAL_THRESHOLDS = {
     'Pleural_Thickening': 0.45, 'Hernia': 0.70
 }
 
+# ============================================================================
 # Pydantic models for responses
+# ============================================================================
+
 class BinaryResult(BaseModel):
     model: str
     is_valid: bool
@@ -79,24 +86,54 @@ class PathologyResult(BaseModel):
     confidence_level: str
     clinical_decision: str
 
+# MODIFIED: Added is_normal field, made pathologies optional
 class AnalysisResponse(BaseModel):
     binary_pipeline: List[BinaryResult]
     valid_for_analysis: bool
+    is_normal: bool  # NEW: Critical flag for frontend routing
     clinical_summary: str
     assessment_level: str
-    pathologies: List[PathologyResult]
+    pathologies: Optional[List[PathologyResult]] = None  # MODIFIED: Optional for normal cases
     heatmap_b64: Optional[str] = None
     ai_explanation: Optional[str] = None
     api_used: Optional[str] = None
     processing_time_ms: float
 
+# NEW: Pydantic models for doctor finder
+class FindDoctorsRequest(BaseModel):
+    latitude: float
+    longitude: float
+    pathologies: List[Dict]
+
+class DoctorInfo(BaseModel):
+    name: str
+    address: str
+    distance_km: float
+    phone: str
+    website: str
+    rating: Optional[float] = None
+
+class FindDoctorsResponse(BaseModel):
+    success: bool
+    specialist_type: Optional[str] = None
+    primary_pathology: Optional[str] = None
+    specialists: Optional[List[DoctorInfo]] = None
+    general_practitioners: Optional[List[DoctorInfo]] = None
+    fallback_message: Optional[str] = None
+    generic_advice: Optional[List[str]] = None
+
 # Initialize FastAPI
-app = FastAPI(title="Chest X-ray Analysis API", version="1.0.0")
+app = FastAPI(title="Chest X-ray Analysis API", version="2.0.0")  # Version bumped
 
 # Add CORS middleware for React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # React dev server
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",  # Vite default
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -231,9 +268,17 @@ def generate_heatmap_b64(image_rgb: Image.Image, inp: torch.Tensor) -> Optional[
         print(f"Heatmap generation failed: {e}")
         return None
 
+# ============================================================================
+# API ENDPOINTS
+# ============================================================================
+
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_xray(file: UploadFile = File(...)):
-    """Analyze uploaded X-ray image"""
+    """
+    Analyze uploaded X-ray image with modified decision flow:
+    - Normal → Return health tips (skip CheXNet)
+    - Abnormal → Run full CheXNet analysis
+    """
     import time
     start_time = time.time()
 
@@ -285,20 +330,50 @@ async def analyze_xray(file: UploadFile = File(...)):
             return AnalysisResponse(
                 binary_pipeline=binary_results,
                 valid_for_analysis=False,
+                is_normal=False,  # NEW FIELD
                 clinical_summary=validation_result['message'],
                 assessment_level="INVALID",
-                pathologies=[],
+                pathologies=None,  # Changed from [] to None
                 heatmap_b64=None,
                 ai_explanation="Image validation failed. Please upload a valid chest X-ray image.",
+                api_used="System Message",
                 processing_time_ms=(time.time() - start_time) * 1000
             )
 
+        # ====================================================================
+        # MODIFIED DECISION FLOW - CRITICAL CHANGE
+        # ====================================================================
+        
+        # CASE A: NORMAL — Skip CheXNet, return health tips
+        if validation_result.get('skip_main_model', False) or is_normal:
+            print("📋 NORMAL case detected — Generating health tips (skipping CheXNet)")
+            
+            # Generate AI explanation for normal case
+            ai_result = explainability_ai.generate_normal_explanation(model3_result or {})
+            
+            processing_time = (time.time() - start_time) * 1000
+            
+            return AnalysisResponse(
+                binary_pipeline=binary_results,
+                valid_for_analysis=True,
+                is_normal=True,  # NEW: Critical flag
+                clinical_summary="✅ NORMAL - No significant abnormalities detected",
+                assessment_level="NORMAL",
+                pathologies=None,  # No pathology analysis for normal cases
+                heatmap_b64=None,  # No heatmap for normal cases
+                ai_explanation=ai_result['explanation'],
+                api_used=ai_result['api_used'],
+                processing_time_ms=round(processing_time, 1)
+            )
+        
+        # CASE B: ABNORMAL — Proceed to full CheXNet analysis
+        print("🔬 ABNORMAL case detected — Running full CheXNet analysis")
+        
         # Run CheXNet analysis
         results, inp = predict_chexnet(image)
 
         # Get model3 normal status for summary
-        model3_result = validation_result['results']['model3']
-        model3_normal = model3_result.get('prediction', '').lower() == 'normal' if model3_result else False
+        model3_normal = False  # Already determined to be abnormal
 
         summary_text, assessment_level = get_clinical_summary(results, model3_normal)
 
@@ -318,37 +393,112 @@ async def analyze_xray(file: UploadFile = File(...)):
         # Generate heatmap
         heatmap_b64 = generate_heatmap_b64(image_rgb, inp)
 
-        # Generate AI explanation
+        # Generate AI explanation for abnormal case
         main_model_result = {
             'assessment_level': assessment_level,
             'pathologies': [{'name': p.pathology, 'probability': p.probability} for p in pathologies]
         }
 
-        ai_explanation_result = explainability_ai.generate_explanation(model3_result or {}, main_model_result)
-        ai_explanation = ai_explanation_result['explanation']
-        api_used = ai_explanation_result.get('api_used', 'Rule-Based Fallback')
+        ai_result = explainability_ai.generate_abnormal_explanation(
+            model3_result or {}, 
+            main_model_result
+        )
 
         processing_time = (time.time() - start_time) * 1000
 
         return AnalysisResponse(
             binary_pipeline=binary_results,
             valid_for_analysis=True,
+            is_normal=False,  # NEW: Critical flag
             clinical_summary=summary_text,
             assessment_level=assessment_level,
             pathologies=pathologies,
             heatmap_b64=heatmap_b64,
-            ai_explanation=ai_explanation,
-            api_used=api_used,
+            ai_explanation=ai_result['explanation'],
+            api_used=ai_result['api_used'],
             processing_time_ms=round(processing_time, 1)
         )
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+# NEW ENDPOINT
+@app.post("/find-doctors", response_model=FindDoctorsResponse)
+async def find_doctors(request: FindDoctorsRequest = Body(...)):
+    """
+    Find specialized doctors near user location based on detected pathologies.
+    
+    Request body:
+    {
+        "latitude": 16.5062,
+        "longitude": 80.6480,
+        "pathologies": [
+            {"name": "Pneumonia", "probability": 0.85},
+            {"name": "Infiltration", "probability": 0.62}
+        ]
+    }
+    """
+    try:
+        # Use Geoapify service to find doctors
+        result = geoapify_finder.find_doctors_for_pathology(
+            latitude=request.latitude,
+            longitude=request.longitude,
+            pathologies=request.pathologies
+        )
+        
+        # Check if we got results or need to use fallback
+        if not result.get('specialists') and not result.get('general_practitioners'):
+            fallback = geoapify_finder.get_fallback_recommendations()
+            return FindDoctorsResponse(
+                success=False,
+                fallback_message=fallback.get('fallback_message'),
+                generic_advice=fallback.get('generic_advice')
+            )
+        
+        # Format successful response
+        specialists = [
+            DoctorInfo(**doc) for doc in result.get('specialists', [])
+        ]
+        gps = [
+            DoctorInfo(**doc) for doc in result.get('general_practitioners', [])
+        ]
+        
+        return FindDoctorsResponse(
+            success=True,
+            specialist_type=result.get('specialist_type'),
+            primary_pathology=result.get('primary_pathology'),
+            specialists=specialists,
+            general_practitioners=gps,
+            fallback_message=None,
+            generic_advice=None
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Error in find_doctors endpoint: {e}")
+        
+        # Return fallback on error
+        fallback = geoapify_finder.get_fallback_recommendations()
+        return FindDoctorsResponse(
+            success=False,
+            fallback_message=fallback.get('fallback_message'),
+            generic_advice=fallback.get('generic_advice')
+        )
+
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "models_loaded": model is not None and binary_pipeline is not None}
+    """Health check endpoint - ENHANCED"""
+    return {
+        "status": "healthy",
+        "models_loaded": model is not None and binary_pipeline is not None,
+        "gemini_available": explainability_ai.client is not None,  # NEW
+        "geoapify_available": geoapify_finder.api_key is not None,  # NEW
+    }
 
 if __name__ == "__main__":
     import uvicorn

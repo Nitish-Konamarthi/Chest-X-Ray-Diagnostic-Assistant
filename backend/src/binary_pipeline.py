@@ -2,8 +2,11 @@
 Binary Classification Pipeline
 =============================
 
+ENHANCED VERSION with modified decision flow:
+- Model3 (Normal) → Skip CheXNet, show health tips  
+- Model3 (Abnormal) → Proceed to full CheXNet analysis
 
-Usage in streamlit_app.py:
+Usage in app.py:
     from binary_pipeline import BinaryClassifierPipeline
 
     pipeline = BinaryClassifierPipeline(
@@ -94,6 +97,10 @@ class BinaryClassifierPipeline:
     """
     Pipeline combining 3 binary classifiers for X-ray validation
 
+    ENHANCED: Modified decision flow
+    - Normal → Skip CheXNet (proceed_to_main_model=False, skip_main_model=True)
+    - Abnormal → Run CheXNet (proceed_to_main_model=True, skip_main_model=False)
+
     Returns validation results with clear error messages for seamless UI integration
     """
 
@@ -118,21 +125,21 @@ class BinaryClassifierPipeline:
         if os.path.exists(model1_path):
             self.model1.load_state_dict(torch.load(model1_path, map_location=self.device), strict=False)
             self.model1.eval()
-            print(f"Loaded Model 1: {model1_path}")
+            print(f"✅ Loaded Model 1: {model1_path}")
         else:
             raise FileNotFoundError(f"Model 1 not found: {model1_path}")
 
         if os.path.exists(model2_path):
             self.model2.load_state_dict(torch.load(model2_path, map_location=self.device), strict=False)
             self.model2.eval()
-            print(f"Loaded Model 2: {model2_path}")
+            print(f"✅ Loaded Model 2: {model2_path}")
         else:
             raise FileNotFoundError(f"Model 2 not found: {model2_path}")
 
         if os.path.exists(model3_path):
             self.model3.load_state_dict(torch.load(model3_path, map_location=self.device), strict=False)
             self.model3.eval()
-            print(f"Loaded Model 3: {model3_path}")
+            print(f"✅ Loaded Model 3: {model3_path}")
         else:
             raise FileNotFoundError(f"Model 3 not found: {model3_path}")
 
@@ -197,10 +204,12 @@ class BinaryClassifierPipeline:
 
         Returns:
             dict: {
-                'valid': bool,           # Whether image passes all checks
-                'message': str,          # Error message if invalid
-                'is_normal': bool,       # Whether image is normal (for UI hints)
-                'results': dict          # Detailed results from each model
+                'valid': bool,                  # Whether image passes all checks
+                'message': str,                 # Error message if invalid
+                'is_normal': bool,              # Whether image is normal (for UI hints)
+                'proceed_to_main_model': bool,  # ADDED: Whether to run CheXNet
+                'skip_main_model': bool,        # ADDED: Whether to skip CheXNet (normal case)
+                'results': dict                 # Detailed results from each model
             }
         """
 
@@ -218,6 +227,8 @@ class BinaryClassifierPipeline:
                     'valid': False,
                     'message': "❌ This doesn't appear to be an X-ray image. Please upload a medical X-ray.",
                     'is_normal': False,
+                    'proceed_to_main_model': False,  # ADDED
+                    'skip_main_model': False,         # ADDED
                     'results': {
                         'model1': {'is_xray': is_xray, 'confidence': xray_conf},
                         'model2': None,
@@ -233,6 +244,8 @@ class BinaryClassifierPipeline:
                     'valid': False,
                     'message': "❌ This appears to be an X-ray, but not of the chest. Please upload a chest X-ray.",
                     'is_normal': False,
+                    'proceed_to_main_model': False,  # ADDED
+                    'skip_main_model': False,         # ADDED
                     'results': {
                         'model1': {'is_xray': is_xray, 'confidence': xray_conf},
                         'model2': {'is_chest': is_chest, 'confidence': chest_conf},
@@ -240,37 +253,60 @@ class BinaryClassifierPipeline:
                     }
                 }
 
-            # Model 3: Normal vs Abnormal — actual model inference
+            # Model 3: Normal vs Abnormal — CRITICAL DECISION POINT
             is_abnormal, abnormal_conf, prediction3 = self._predict_model3(image_tensor)
 
             processing_time = time.time() - start_time
             is_normal = not is_abnormal
 
-            return {
-                'valid': True,
-                'message': (
-                    "✅ Valid chest X-ray detected. Initial assessment: Normal."
-                    if is_normal else
-                    "✅ Valid chest X-ray detected. Initial assessment: Abnormal — further analysis required."
-                ),
-                'is_normal': is_normal,
-                'results': {
-                    'model1': {'is_xray': is_xray, 'confidence': xray_conf},
-                    'model2': {'is_chest': is_chest, 'confidence': chest_conf},
-                    'model3': {
-                        'prediction': prediction3,      # 'normal' or 'abnormal'
-                        'is_abnormal': is_abnormal,
-                        'confidence': abnormal_conf
-                    },
-                    'processing_time_ms': processing_time * 1000
+            # MODIFIED DECISION LOGIC:
+            # If NORMAL → Skip main model, show health tips
+            # If ABNORMAL → Proceed to main model for detailed analysis
+            
+            if is_normal:
+                return {
+                    'valid': True,
+                    'message': "✅ Valid chest X-ray detected. Initial assessment: NORMAL - No significant abnormalities detected.",
+                    'is_normal': True,
+                    'proceed_to_main_model': False,  # ADDED: Skip CheXNet for normal cases
+                    'skip_main_model': True,          # ADDED: Flag to show health tips instead
+                    'results': {
+                        'model1': {'is_xray': is_xray, 'confidence': xray_conf},
+                        'model2': {'is_chest': is_chest, 'confidence': chest_conf},
+                        'model3': {
+                            'prediction': prediction3,      # 'normal'
+                            'is_abnormal': is_abnormal,     # False
+                            'confidence': abnormal_conf
+                        },
+                        'processing_time_ms': processing_time * 1000
+                    }
                 }
-            }
+            else:
+                return {
+                    'valid': True,
+                    'message': "✅ Valid chest X-ray detected. Initial assessment: ABNORMAL - Proceeding to detailed pathology analysis.",
+                    'is_normal': False,
+                    'proceed_to_main_model': True,   # ADDED: Proceed to CheXNet for abnormal cases
+                    'skip_main_model': False,         # ADDED: Flag for full analysis
+                    'results': {
+                        'model1': {'is_xray': is_xray, 'confidence': xray_conf},
+                        'model2': {'is_chest': is_chest, 'confidence': chest_conf},
+                        'model3': {
+                            'prediction': prediction3,      # 'abnormal'
+                            'is_abnormal': is_abnormal,     # True
+                            'confidence': abnormal_conf
+                        },
+                        'processing_time_ms': processing_time * 1000
+                    }
+                }
 
         except Exception as e:
             return {
                 'valid': False,
                 'message': f"❌ Error processing image: {str(e)}",
                 'is_normal': False,
+                'proceed_to_main_model': False,  # ADDED
+                'skip_main_model': False,         # ADDED
                 'results': None
             }
 
