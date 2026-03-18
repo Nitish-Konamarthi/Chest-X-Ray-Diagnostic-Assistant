@@ -75,12 +75,14 @@ export default function App() {
 
             {results.valid_for_analysis ? (
               <>
-                {/* Pathology findings + bar chart + model footer */}
-                <PathologyResults
-                  pathologies={results.pathologies}
-                  assessmentLevel={results.assessment_level}
-                  clinicalSummary={results.clinical_summary}
-                />
+                {/* Pathology findings — only for abnormal results */}
+                {!results.is_normal && (
+                  <PathologyResults
+                    pathologies={results.pathologies}
+                    assessmentLevel={results.assessment_level}
+                    clinicalSummary={results.clinical_summary}
+                  />
+                )}
 
                 {/* Gemini AI Explanation */}
                 <AIExplanationCard
@@ -88,8 +90,11 @@ export default function App() {
                   apiUsed={results.api_used}
                 />
 
-                {/* Nearby specialist doctors */}
-                <NearbyDoctors pathologies={results.pathologies} />
+                {/* Nearby specialist doctors — renders for both NORMAL and ABNORMAL */}
+                <NearbyDoctors
+                  pathologies={results.pathologies}
+                  isNormal={results.is_normal}
+                />
               </>
             ) : (
               <div className="invalid-banner">

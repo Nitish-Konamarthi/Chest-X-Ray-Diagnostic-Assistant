@@ -5,8 +5,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0e1117;
-  color: #fafafa;
+  /* Light theme — App.css handles the design tokens and colors */
+  background-color: #f1f5f9;
+  color: #0f172a;
 }
 
 code {

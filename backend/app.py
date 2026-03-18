@@ -107,8 +107,9 @@ class FindDoctorsRequest(BaseModel):
 
 class DoctorInfo(BaseModel):
     name: str
+    hospital: str      # Same as name — clinic/hospital label for card
     address: str
-    distance_km: float
+    distance: str      # Formatted string e.g. "1.2 km"
     phone: str
     website: str
     rating: Optional[float] = None
@@ -458,13 +459,20 @@ async def find_doctors(request: FindDoctorsRequest = Body(...)):
                 generic_advice=fallback.get('generic_advice')
             )
         
-        # Format successful response
-        specialists = [
-            DoctorInfo(**doc) for doc in result.get('specialists', [])
-        ]
-        gps = [
-            DoctorInfo(**doc) for doc in result.get('general_practitioners', [])
-        ]
+        # Format successful response — map geoapify fields to frontend-compatible DoctorInfo
+        def _to_doctor_info(doc: dict) -> DoctorInfo:
+            return DoctorInfo(
+                name=doc.get('name', 'Medical Facility'),
+                hospital=doc.get('name', 'Medical Facility'),  # use name as hospital label
+                address=doc.get('address', 'Address not available'),
+                distance=f"{doc.get('distance_km', 0.0)} km",
+                phone=doc.get('phone', 'Not available'),
+                website=doc.get('website', 'Not available'),
+                rating=doc.get('rating'),
+            )
+
+        specialists = [_to_doctor_info(doc) for doc in result.get('specialists', [])]
+        gps = [_to_doctor_info(doc) for doc in result.get('general_practitioners', [])]
         
         return FindDoctorsResponse(
             success=True,

@@ -3,31 +3,32 @@ import React, { useState, useEffect, useCallback } from 'react';
 /**
  * NearbyDoctors
  * -------------
- * Shows specialist doctor flashcards based on detected pathologies.
- * Auto-requests geolocation on mount and loads doctors immediately —
- * no button click needed. Falls back gracefully if location is denied.
- * "Find Nearby on Maps" uses the user's real coordinates when available.
+ * Calls the real /find-doctors backend API using the user's geolocation + pathologies.
+ * Falls back to curated mock data if location is denied or the API is unavailable.
+ * Shows a "routine checkup" General Physician section for NORMAL X-ray results.
  */
 
-// ── Specialty mapping ─────────────────────────────────────────────────────────
+const API_BASE = 'http://localhost:8000';
+
+// ── Specialty mapping (for display labels / emojis) ───────────────────────────
 const PATHOLOGY_SPECIALTY_MAP = {
-  Atelectasis:        { specialty: 'Pulmonologist',    keyword: 'pulmonologist',     emoji: '🫁' },
-  Cardiomegaly:       { specialty: 'Cardiologist',     keyword: 'cardiologist',      emoji: '❤️' },
-  Effusion:           { specialty: 'Pulmonologist',    keyword: 'pulmonologist',     emoji: '🫁' },
-  Infiltration:       { specialty: 'Pulmonologist',    keyword: 'chest physician',   emoji: '🫁' },
-  Mass:               { specialty: 'Oncologist',       keyword: 'oncologist',        emoji: '🔬' },
-  Nodule:             { specialty: 'Pulmonologist',    keyword: 'pulmonologist',     emoji: '🫁' },
-  Pneumonia:          { specialty: 'Pulmonologist',    keyword: 'chest physician',   emoji: '🫁' },
-  Pneumothorax:       { specialty: 'Thoracic Surgeon', keyword: 'thoracic surgeon',  emoji: '🏥' },
-  Consolidation:      { specialty: 'Pulmonologist',    keyword: 'pulmonologist',     emoji: '🫁' },
-  Edema:              { specialty: 'Cardiologist',     keyword: 'cardiologist',      emoji: '❤️' },
-  Emphysema:          { specialty: 'Pulmonologist',    keyword: 'pulmonologist',     emoji: '🫁' },
-  Fibrosis:           { specialty: 'Rheumatologist',   keyword: 'rheumatologist',    emoji: '💊' },
-  Pleural_Thickening: { specialty: 'Pulmonologist',    keyword: 'chest physician',   emoji: '🫁' },
-  Hernia:             { specialty: 'General Surgeon',  keyword: 'general surgeon',   emoji: '🏥' },
+  Atelectasis: { specialty: 'Pulmonologist', keyword: 'pulmonologist', emoji: '🫁' },
+  Cardiomegaly: { specialty: 'Cardiologist', keyword: 'cardiologist', emoji: '❤️' },
+  Effusion: { specialty: 'Pulmonologist', keyword: 'pulmonologist', emoji: '🫁' },
+  Infiltration: { specialty: 'Pulmonologist', keyword: 'chest physician', emoji: '🫁' },
+  Mass: { specialty: 'Oncologist', keyword: 'oncologist', emoji: '🔬' },
+  Nodule: { specialty: 'Pulmonologist', keyword: 'pulmonologist', emoji: '🫁' },
+  Pneumonia: { specialty: 'Pulmonologist', keyword: 'chest physician', emoji: '🫁' },
+  Pneumothorax: { specialty: 'Thoracic Surgeon', keyword: 'thoracic surgeon', emoji: '🏥' },
+  Consolidation: { specialty: 'Pulmonologist', keyword: 'pulmonologist', emoji: '🫁' },
+  Edema: { specialty: 'Cardiologist', keyword: 'cardiologist', emoji: '❤️' },
+  Emphysema: { specialty: 'Pulmonologist', keyword: 'pulmonologist', emoji: '🫁' },
+  Fibrosis: { specialty: 'Rheumatologist', keyword: 'rheumatologist', emoji: '💊' },
+  Pleural_Thickening: { specialty: 'Pulmonologist', keyword: 'chest physician', emoji: '🫁' },
+  Hernia: { specialty: 'General Surgeon', keyword: 'general surgeon', emoji: '🏥' },
 };
 
-// ── Mock fallback doctors ─────────────────────────────────────────────────────
+// ── Mock fallback doctors (used when API is unavailable / location denied) ────
 const MOCK_DOCTORS = {
   Pulmonologist: [
     { name: 'Dr. Arjun Mehta', hospital: 'Apollo Hospitals', address: 'Jubilee Hills, Hyderabad', phone: '+91-40-23607777', distance: '1.2 km', rating: 4.8 },
@@ -42,22 +43,18 @@ const MOCK_DOCTORS = {
   Oncologist: [
     { name: 'Dr. Pooja Nair', hospital: 'Tata Memorial Hospital', address: 'Dr. Ernest Borges Rd, Mumbai', phone: '+91-22-24177000', distance: '2.3 km', rating: 4.9 },
     { name: 'Dr. Sameer Gupta', hospital: 'Rajiv Gandhi Cancer Institute', address: 'Rohini, New Delhi', phone: '+91-11-47022222', distance: '3.8 km', rating: 4.8 },
-    { name: 'Dr. Meena Krishnan', hospital: 'Cancer Institute (WIA)', address: 'Sardar Patel Rd, Chennai', phone: '+91-44-22350241', distance: '4.1 km', rating: 4.7 },
   ],
   'Thoracic Surgeon': [
     { name: 'Dr. Anil Saxena', hospital: 'Max Super Speciality Hospital', address: 'Saket, New Delhi', phone: '+91-11-26519050', distance: '2.8 km', rating: 4.7 },
     { name: 'Dr. Kavitha Reddy', hospital: 'Yashoda Hospitals', address: 'Malakpet, Hyderabad', phone: '+91-40-45677777', distance: '3.3 km', rating: 4.6 },
-    { name: 'Dr. Suresh Babu', hospital: 'Global Hospitals', address: 'Lakdi Ka Pul, Hyderabad', phone: '+91-40-30244444', distance: '1.9 km', rating: 4.8 },
   ],
   'General Surgeon': [
     { name: 'Dr. Deepak Joshi', hospital: 'Lilavati Hospital', address: 'Bandra West, Mumbai', phone: '+91-22-26751000', distance: '1.5 km', rating: 4.7 },
     { name: 'Dr. Nalini Singh', hospital: 'Sir Ganga Ram Hospital', address: 'Old Rajinder Nagar, Delhi', phone: '+91-11-25750000', distance: '2.7 km', rating: 4.8 },
-    { name: 'Dr. Rajan Pillai', hospital: 'Christian Medical College', address: 'Vellore, Tamil Nadu', phone: '+91-416-2281000', distance: '3.2 km', rating: 4.9 },
   ],
   Rheumatologist: [
     { name: 'Dr. Sanjay Bhatia', hospital: 'PD Hinduja Hospital', address: 'Mahim, Mumbai', phone: '+91-22-24452222', distance: '1.8 km', rating: 4.7 },
     { name: 'Dr. Geeta Verma', hospital: 'AIIMS Rishikesh', address: 'Veerbhadra Rd, Rishikesh', phone: '+91-135-2462946', distance: '4.5 km', rating: 4.6 },
-    { name: 'Dr. Harish Nanda', hospital: 'BLK-Max Super Speciality', address: 'Pusa Road, New Delhi', phone: '+91-11-30403040', distance: '3.0 km', rating: 4.8 },
   ],
   'General Physician': [
     { name: 'Dr. Anita Verma', hospital: 'City Clinic', address: 'MG Road, Pune', phone: '+91-20-26130000', distance: '0.7 km', rating: 4.6 },
@@ -66,7 +63,6 @@ const MOCK_DOCTORS = {
 };
 
 // ── Build a Google Maps search URL ────────────────────────────────────────────
-// If we have the user's coordinates, open Maps centered on them for that specialty.
 const buildMapsUrl = (keyword, lat, lng) => {
   if (lat && lng) {
     return `https://www.google.com/maps/search/${encodeURIComponent(keyword)}/@${lat},${lng},13z`;
@@ -76,6 +72,7 @@ const buildMapsUrl = (keyword, lat, lng) => {
 
 // ── Star rating ───────────────────────────────────────────────────────────────
 const StarRating = ({ rating }) => {
+  if (!rating) return null;
   const full = Math.floor(rating);
   const half = rating - full >= 0.5;
   return (
@@ -96,13 +93,17 @@ const DoctorCard = ({ doctor, specialty, emoji, keyword, lat, lng }) => (
       <span className="doctor-specialty-badge">{specialty}</span>
     </div>
     <div className="doctor-name">{doctor.name}</div>
-    <div className="doctor-hospital">{doctor.hospital}</div>
+    {doctor.hospital && doctor.hospital !== doctor.name && (
+      <div className="doctor-hospital">{doctor.hospital}</div>
+    )}
     <div className="doctor-address">📍 {doctor.address}</div>
-    <StarRating rating={doctor.rating} />
-    <div className="doctor-distance">🚗 {doctor.distance} away</div>
-    <a className="doctor-phone" href={`tel:${doctor.phone.replace(/\s/g, '')}`}>
-      📞 {doctor.phone}
-    </a>
+    {doctor.rating && <StarRating rating={doctor.rating} />}
+    {doctor.distance && <div className="doctor-distance">🚗 {doctor.distance} away</div>}
+    {doctor.phone && doctor.phone !== 'Not available' && (
+      <a className="doctor-phone" href={`tel:${doctor.phone.replace(/[\s\-()]/g, '')}`}>
+        📞 {doctor.phone}
+      </a>
+    )}
     <div className="doctor-card-footer">
       <button
         className="btn-book"
@@ -118,100 +119,150 @@ const DoctorCard = ({ doctor, specialty, emoji, keyword, lat, lng }) => (
 );
 
 // ── Main component ────────────────────────────────────────────────────────────
-const NearbyDoctors = ({ pathologies }) => {
+const NearbyDoctors = ({ pathologies, isNormal }) => {
   const [locationGranted, setLocationGranted] = useState(false);
-  const [locationDenied, setLocationDenied]   = useState(false);
-  const [userCity, setUserCity]               = useState(null);
-  const [userCoords, setUserCoords]           = useState({ lat: null, lng: null });
-  const [doctors, setDoctors]                 = useState([]);
-  const [gpDoctors, setGpDoctors]             = useState([]);
-  const [loading, setLoading]                 = useState(true);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [userCity, setUserCity] = useState(null);
+  const [userCoords, setUserCoords] = useState({ lat: null, lng: null });
+  const [specialists, setSpecialists] = useState([]);
+  const [gpDoctors, setGpDoctors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [apiUsed, setApiUsed] = useState(false);
   const [targetSpecialty, setTargetSpecialty] = useState(null);
-  const [targetKeyword, setTargetKeyword]     = useState('pulmonologist');
-  const [targetEmoji, setTargetEmoji]         = useState('🏥');
+  const [targetKeyword, setTargetKeyword] = useState('pulmonologist');
+  const [targetEmoji, setTargetEmoji] = useState('🏥');
 
-  // Determine primary specialty from top pathology (above 0.2 probability)
+  // Determine primary specialty from top pathology
   const getTargetSpecialty = useCallback(() => {
-    if (!pathologies || pathologies.length === 0) return null;
+    if (isNormal || !pathologies || pathologies.length === 0) {
+      return { specialty: 'General Physician', keyword: 'general physician', emoji: '🩺' };
+    }
     const sorted = [...pathologies].sort((a, b) => b.probability - a.probability);
     for (const p of sorted) {
       const mapped = PATHOLOGY_SPECIALTY_MAP[p.pathology];
       if (mapped && p.probability > 0.2) return mapped;
     }
-    const mapped = PATHOLOGY_SPECIALTY_MAP[sorted[0]?.pathology];
-    return mapped || { specialty: 'Pulmonologist', keyword: 'pulmonologist', emoji: '🫁' };
-  }, [pathologies]);
+    return PATHOLOGY_SPECIALTY_MAP[sorted[0]?.pathology] ||
+      { specialty: 'Pulmonologist', keyword: 'pulmonologist', emoji: '🫁' };
+  }, [pathologies, isNormal]);
 
-  // Auto-load doctors immediately + try geolocation
-  useEffect(() => {
-    const mapped = getTargetSpecialty();
-    if (!mapped) return;
+  // Call backend /find-doctors API
+  const fetchDoctorsFromAPI = useCallback(async (lat, lng) => {
+    if (!pathologies && !isNormal) return false;
 
-    setTargetSpecialty(mapped.specialty);
-    setTargetKeyword(mapped.keyword);
-    setTargetEmoji(mapped.emoji);
+    const pathologiesPayload = isNormal
+      ? []
+      : pathologies.map(p => ({ name: p.pathology, probability: p.probability }));
 
-    const pool   = MOCK_DOCTORS[mapped.specialty] || MOCK_DOCTORS['Pulmonologist'];
+    try {
+      const response = await fetch(`${API_BASE}/find-doctors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latitude: lat,
+          longitude: lng,
+          pathologies: pathologiesPayload,
+        }),
+      });
+
+      if (!response.ok) return false;
+
+      const data = await response.json();
+
+      if (data.success && (data.specialists?.length || data.general_practitioners?.length)) {
+        setSpecialists(data.specialists || []);
+        setGpDoctors(data.general_practitioners || []);
+        setApiUsed(true);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, [pathologies, isNormal]);
+
+  // Load mock fallback data
+  const loadMockData = useCallback((specialtyInfo) => {
+    const pool = MOCK_DOCTORS[specialtyInfo.specialty] || MOCK_DOCTORS['Pulmonologist'];
     const gpPool = MOCK_DOCTORS['General Physician'];
+    setSpecialists(pool);
+    setGpDoctors(isNormal ? [] : gpPool);
+    setApiUsed(false);
+  }, [isNormal]);
 
-    // Try geolocation (non-blocking — always show doctors regardless)
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          setLocationGranted(true);
-          setUserCoords({ lat, lng });
+  useEffect(() => {
+    const specialtyInfo = getTargetSpecialty();
+    setTargetSpecialty(specialtyInfo.specialty);
+    setTargetKeyword(specialtyInfo.keyword);
+    setTargetEmoji(specialtyInfo.emoji);
 
-          // Free Nominatim reverse geocode — no API key needed
-          fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-            { headers: { 'Accept-Language': 'en' } }
-          )
-            .then(r => r.json())
-            .then(data => {
-              const city =
-                data.address?.city    ||
-                data.address?.town    ||
-                data.address?.suburb  ||
-                data.address?.village ||
-                'your area';
-              setUserCity(city);
-            })
-            .catch(() => setUserCity('your area'));
-        },
-        () => {
-          // Denied — still show cards
-          setLocationDenied(true);
-        },
-        { timeout: 5000, maximumAge: 60000 }
-      );
-    } else {
+    if (!navigator.geolocation) {
       setLocationDenied(true);
+      loadMockData(specialtyInfo);
+      setLoading(false);
+      return;
     }
 
-    // Always show cards after a brief simulated loading delay
-    const timer = setTimeout(() => {
-      setDoctors(pool);
-      setGpDoctors(gpPool);
-      setLoading(false);
-    }, 700);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLocationGranted(true);
+        setUserCoords({ lat, lng });
 
-    return () => clearTimeout(timer);
-  }, [getTargetSpecialty]);
+        // Reverse geocode for city name
+        fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+          { headers: { 'Accept-Language': 'en' } }
+        )
+          .then(r => r.json())
+          .then(data => {
+            const city =
+              data.address?.city ||
+              data.address?.town ||
+              data.address?.suburb ||
+              data.address?.village ||
+              'your area';
+            setUserCity(city);
+          })
+          .catch(() => setUserCity('your area'));
+
+        // Try real API first
+        const apiSuccess = await fetchDoctorsFromAPI(lat, lng);
+        if (!apiSuccess) {
+          loadMockData(specialtyInfo);
+        }
+        setLoading(false);
+      },
+      () => {
+        // Location denied — use mock data
+        setLocationDenied(true);
+        loadMockData(specialtyInfo);
+        setLoading(false);
+      },
+      { timeout: 6000, maximumAge: 60000 }
+    );
+  }, [getTargetSpecialty, fetchDoctorsFromAPI, loadMockData]);
 
   if (!targetSpecialty) return null;
+
+  const isSectionForNormal = isNormal;
 
   return (
     <div className="nearby-section">
       {/* Header */}
       <div className="nearby-header">
         <div>
-          <h3 className="nearby-title">📍 Recommended Specialists Near You</h3>
+          <h3 className="nearby-title">
+            {isSectionForNormal ? '🩺 Recommended for Routine Checkup' : '📍 Recommended Specialists Near You'}
+          </h3>
           <p className="nearby-subtitle">
-            Based on the detected conditions, we recommend consulting a{' '}
+            {isSectionForNormal
+              ? 'Your X-ray appears normal. We still recommend a periodic health checkup with a '
+              : 'Based on the detected conditions, we recommend consulting a '}
             <strong>{targetSpecialty}</strong>
             {locationGranted && userCity ? ` near ${userCity}` : ''}.
+            {apiUsed && <span className="api-live-badge"> ✅ Live results near you</span>}
           </p>
         </div>
 
@@ -230,43 +281,49 @@ const NearbyDoctors = ({ pathologies }) => {
       ) : (
         <>
           {/* Specialist cards */}
-          <div className="doctor-cards-scroll">
-            {doctors.map((doc, i) => (
-              <DoctorCard
-                key={i}
-                doctor={doc}
-                specialty={targetSpecialty}
-                emoji={targetEmoji}
-                keyword={targetKeyword}
-                lat={userCoords.lat}
-                lng={userCoords.lng}
-              />
-            ))}
-          </div>
-
-          {/* General Physician fallback section */}
-          <div style={{ marginTop: '20px' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '10px' }}>
-              🩺 Also consider a General Physician for initial consultation:
-            </div>
+          {specialists.length > 0 && (
             <div className="doctor-cards-scroll">
-              {gpDoctors.map((doc, i) => (
+              {specialists.map((doc, i) => (
                 <DoctorCard
                   key={i}
                   doctor={doc}
-                  specialty="General Physician"
-                  emoji="🩺"
-                  keyword="general physician"
+                  specialty={targetSpecialty}
+                  emoji={targetEmoji}
+                  keyword={targetKeyword}
                   lat={userCoords.lat}
                   lng={userCoords.lng}
                 />
               ))}
             </div>
-          </div>
+          )}
+
+          {/* General Physician fallback section (only for abnormal cases) */}
+          {!isSectionForNormal && gpDoctors.length > 0 && (
+            <div style={{ marginTop: '20px' }}>
+              <div className="gp-section-label">
+                🩺 Also consider a General Physician for initial consultation:
+              </div>
+              <div className="doctor-cards-scroll">
+                {gpDoctors.map((doc, i) => (
+                  <DoctorCard
+                    key={i}
+                    doctor={doc}
+                    specialty="General Physician"
+                    emoji="🩺"
+                    keyword="general physician"
+                    lat={userCoords.lat}
+                    lng={userCoords.lng}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="nearby-disclaimer">
-            * Listings are representative. Verify availability and credentials before booking.
-            {locationDenied && ' Enable location access for results near you.'}
+            {apiUsed
+              ? '* Live results from Geoapify. Verify availability and credentials before booking.'
+              : '* Representative listings shown. Enable location access for results near you.'}
+            {locationDenied && ' Allow location access for personalized results.'}
           </p>
         </>
       )}
