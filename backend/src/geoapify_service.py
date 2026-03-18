@@ -32,23 +32,26 @@ class GeoapifyDoctorFinder:
     API_BASE_URL = "https://api.geoapify.com/v2/places"
     MAX_RADIUS_METERS = 100000  # 100 km
     
-    # Pathology to specialist mapping
+    # Pathology to specialist mapping — values are (display_label, geoapify_category)
     PATHOLOGY_SPECIALIST_MAP = {
-        'Pneumonia': 'pulmonologist',
-        'Pneumothorax': 'pulmonologist',
-        'Atelectasis': 'pulmonologist',
-        'Infiltration': 'pulmonologist',
-        'Consolidation': 'pulmonologist',
-        'Emphysema': 'pulmonologist',
-        'Fibrosis': 'pulmonologist',
-        'Pleural_Thickening': 'pulmonologist',
-        'Effusion': 'pulmonologist',
-        'Cardiomegaly': 'cardiologist',
-        'Edema': 'cardiologist',
-        'Mass': 'oncologist',
-        'Nodule': 'oncologist',
-        'Hernia': 'general surgeon',
+        'Pneumonia':          ('pulmonologist',     'healthcare.clinic_or_praxis.pulmonology'),
+        'Pneumothorax':       ('pulmonologist',     'healthcare.clinic_or_praxis.pulmonology'),
+        'Atelectasis':        ('pulmonologist',     'healthcare.clinic_or_praxis.pulmonology'),
+        'Infiltration':       ('pulmonologist',     'healthcare.clinic_or_praxis.pulmonology'),
+        'Consolidation':      ('pulmonologist',     'healthcare.clinic_or_praxis.pulmonology'),
+        'Emphysema':          ('pulmonologist',     'healthcare.clinic_or_praxis.pulmonology'),
+        'Fibrosis':           ('pulmonologist',     'healthcare.clinic_or_praxis.pulmonology'),
+        'Pleural_Thickening': ('pulmonologist',     'healthcare.clinic_or_praxis.pulmonology'),
+        'Effusion':           ('pulmonologist',     'healthcare.clinic_or_praxis.pulmonology'),
+        'Cardiomegaly':       ('cardiologist',      'healthcare.clinic_or_praxis.cardiology'),
+        'Edema':              ('cardiologist',      'healthcare.clinic_or_praxis.cardiology'),
+        'Mass':               ('oncologist',        'healthcare.clinic_or_praxis'),
+        'Nodule':             ('oncologist',        'healthcare.clinic_or_praxis'),
+        'Hernia':             ('general surgeon',   'healthcare.hospital'),
     }
+
+    # GP / general fallback category
+    GENERAL_CATEGORY = 'healthcare.clinic_or_praxis.general,healthcare.clinic_or_praxis,healthcare.hospital'
 
     def __init__(self):
         self.api_key = os.getenv('GEOAPIFY_API_KEY')
@@ -59,76 +62,59 @@ class GeoapifyDoctorFinder:
         else:
             print("✅ Geoapify API key loaded successfully")
 
-    def _determine_specialist_type(self, pathologies: List[Dict]) -> Tuple[str, str]:
+    def _determine_specialist_type(self, pathologies: List[Dict]) -> Tuple[str, str, str]:
         """
         Determine the primary specialist needed based on detected pathologies.
-        
-        Args:
-            pathologies: List of detected pathologies with probabilities
-            
         Returns:
-            Tuple of (specialist_type, primary_pathology)
+            Tuple of (specialist_label, primary_pathology, geoapify_category)
         """
         if not pathologies:
-            return 'general practitioner', 'General Health Check'
-        
+            return 'general practitioner', 'General Health Check', self.GENERAL_CATEGORY
+
         # Filter high-probability findings (>40%)
         significant = [p for p in pathologies if p.get('probability', 0) > 0.4]
-        
+
         if not significant:
-            return 'general practitioner', 'Preventive Care'
-        
+            return 'general practitioner', 'Preventive Care', self.GENERAL_CATEGORY
+
         # Sort by probability
         significant.sort(key=lambda x: x.get('probability', 0), reverse=True)
-        
-        # Get primary pathology
-        primary = significant[0]
-        primary_name = primary.get('name', '')
-        
-        # Map to specialist
-        specialist = self.PATHOLOGY_SPECIALIST_MAP.get(
-            primary_name, 
-            'general practitioner'
-        )
-        
-        return specialist, primary_name
+
+        primary_name = significant[0].get('name', '')
+        mapping = self.PATHOLOGY_SPECIALIST_MAP.get(primary_name)
+
+        if mapping:
+            label, category = mapping
+        else:
+            label, category = 'general practitioner', self.GENERAL_CATEGORY
+
+        return label, primary_name, category
 
     def _search_doctors(
-        self, 
-        latitude: float, 
-        longitude: float, 
+        self,
+        latitude: float,
+        longitude: float,
         specialist_type: str,
+        geoapify_category: Optional[str] = None,
         limit: int = 4
     ) -> List[Dict]:
         """
-        Search for doctors using Geoapify Places API.
-        
-        Args:
-            latitude: User's latitude
-            longitude: User's longitude
-            specialist_type: Type of specialist (e.g., 'pulmonologist')
-            limit: Maximum number of results
-            
-        Returns:
-            List of doctor/clinic information dictionaries
+        Search for doctors using Geoapify Places API with correct category names.
         """
         if not self.api_key:
             return []
-        
+
         try:
-            # Geoapify categories for healthcare
-            # https://apidocs.geoapify.com/docs/places/categories/
+            # Use provided category, or fall back to generic healthcare
+            category = geoapify_category or self.GENERAL_CATEGORY
+
             params = {
-                'categories': 'healthcare.doctor,healthcare.clinic,healthcare.hospital',
+                'categories': category,
                 'filter': f'circle:{longitude},{latitude},{self.MAX_RADIUS_METERS}',
                 'bias': f'proximity:{longitude},{latitude}',
-                'limit': limit * 2,  # Request more to filter better results
+                'limit': limit * 2,
                 'apiKey': self.api_key,
             }
-            
-            # Add text filter for specialist type if not general practitioner
-            if specialist_type != 'general practitioner':
-                params['text'] = specialist_type
             
             response = requests.get(
                 f"{self.API_BASE_URL}",
@@ -149,14 +135,19 @@ class GeoapifyDoctorFinder:
             for feature in features[:limit]:
                 props = feature.get('properties', {})
                 
+                # Extract contact info (Geoapify nests it differently)
+                contact = props.get('contact', {})
+                if isinstance(contact, dict):
+                    phone = contact.get('phone', contact.get('telephone', 'Not available'))
+                else:
+                    phone = 'Not available'
+                
                 doctor_info = {
                     'name': props.get('name', 'Medical Facility'),
-                    'address': props.get('formatted', 'Address not available'),
+                    'address': props.get('formatted', props.get('address_line1', 'Address not available')),
                     'distance_km': round(props.get('distance', 0) / 1000, 1),
-                    'latitude': props.get('lat'),
-                    'longitude': props.get('lon'),
-                    'phone': props.get('contact', {}).get('phone', 'Not available'),
-                    'website': props.get('website', 'Not available'),
+                    'phone': phone,
+                    'website': props.get('datasource', {}).get('url', props.get('website', 'Not available')),
                     'rating': props.get('rating', None),
                 }
                 
@@ -190,27 +181,46 @@ class GeoapifyDoctorFinder:
         Returns:
             Dictionary with specialist recommendations and doctor listings
         """
-        # Determine specialist type needed
-        specialist_type, primary_pathology = self._determine_specialist_type(pathologies)
-        
-        # Search for specialists
+        # Determine specialist type needed (returns 3-tuple)
+        specialist_type, primary_pathology, specialist_category = self._determine_specialist_type(pathologies)
+
+        # ── Level 1: Search for specialists using the exact specialty category ──
         specialists = self._search_doctors(
-            latitude, 
-            longitude, 
+            latitude,
+            longitude,
             specialist_type,
+            geoapify_category=specialist_category,
             limit=4
         )
-        
-        # Search for general practitioners
+
+        # ── Level 2 fallback: if exact category has no data, try broader healthcare ──
+        # (Common in many regions where clinics are tagged only as 'clinic_or_praxis'
+        #  or 'hospital', not by specific specialty.)
+        if not specialists:
+            print(f"ℹ️  No '{specialist_category}' results — falling back to broader search")
+            specialists = self._search_doctors(
+                latitude,
+                longitude,
+                specialist_type,
+                geoapify_category='healthcare.clinic_or_praxis,healthcare.hospital',
+                limit=4
+            )
+
+        # ── GP / general search (always runs, for secondary recommendations) ──
         general_practitioners = []
         if include_general_practitioner:
             general_practitioners = self._search_doctors(
                 latitude,
                 longitude,
                 'general practitioner',
+                geoapify_category=self.GENERAL_CATEGORY,
                 limit=2
             )
-        
+
+        # De-duplicate: remove GPs that are already in the specialist list
+        specialist_names = {s['name'] for s in specialists}
+        general_practitioners = [g for g in general_practitioners if g['name'] not in specialist_names]
+
         return {
             'specialist_type': specialist_type,
             'primary_pathology': primary_pathology,

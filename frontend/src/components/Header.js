@@ -5,7 +5,7 @@ const Header = () => (
     <div className="header-brand">
       <span className="header-icon">🩺</span>
       <div>
-        <h1 className="header-title">CheXNet Clinical AI</h1>
+        <h1 className="header-title"> Chest X-ray Diagnostic Assistant</h1>
         <p className="header-subtitle">Chest X-ray Pathology Detection &amp; Explainability</p>
       </div>
     </div>
@@ -13,7 +13,7 @@ const Header = () => (
       <span className="feature-badge">🔍 Clinical Confidence Levels</span>
       <span className="feature-badge">🔥 Grad-CAM++ Heatmaps</span>
       <span className="feature-badge">📊 14-Pathology DenseNet-121</span>
-      <span className="feature-badge">🤖 Gemini 2.0 Flash AI</span>
+      <span className="feature-badge">🤖 Gemini 3.1 Flash Lite AI</span>
       <span className="feature-badge">📍 Nearby Specialists</span>
     </div>
   </header>
