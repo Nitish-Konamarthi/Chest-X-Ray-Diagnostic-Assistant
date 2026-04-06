@@ -547,9 +547,9 @@ body {
   font-size: 0.83rem;
   font-weight: 500;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   color: var(--text-secondary);
+  /* overflow visible so the popover is never clipped */
+  overflow: visible;
 }
 
 .pred-bar-track {
@@ -1067,5 +1067,136 @@ body {
 
   .pred-bar-label {
     width: 110px;
+  }
+}
+
+/* ── Disease Hover Popover ── */
+
+/* The tag itself — inline, no wrapper needed */
+.disease-tag {
+  color: var(--accent-blue);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+  font-weight: 600;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.disease-tag:hover {
+  color: #1d4ed8;
+}
+
+/* Popover uses position:fixed so it escapes overflow:hidden parents */
+.disease-popover {
+  position: fixed;
+  z-index: 9999;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  padding: 12px 14px;
+  width: 280px;
+  animation: popoverFadeIn 0.15s ease;
+  pointer-events: auto;
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.disease-popover-title {
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.disease-popover-title::before {
+  content: '🫁';
+  font-size: 0.9rem;
+}
+
+/* Thumbnail image from Wikipedia */
+.disease-popover-thumb {
+  width: 100%;
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  display: block;
+  border: 1px solid var(--border);
+}
+
+.disease-popover-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.wiki-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #cbd5e1;
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.disease-popover-extract {
+  font-size: 0.79rem;
+  color: var(--text-secondary);
+  line-height: 1.58;
+  margin: 0 0 9px 0;
+}
+
+.disease-popover-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--accent-blue);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.15s, gap 0.15s;
+}
+
+.disease-popover-link:hover {
+  color: #1d4ed8;
+  gap: 7px;
+}
+
+.disease-popover-link--search {
+  color: var(--text-muted);
+}
+
+.disease-popover-link--search:hover {
+  color: var(--text-secondary);
+}
+
+/* Responsive: narrower popover on small screens */
+@media (max-width: 480px) {
+  .disease-popover {
+    width: calc(100vw - 32px);
+    left: 16px !important;
   }
 }

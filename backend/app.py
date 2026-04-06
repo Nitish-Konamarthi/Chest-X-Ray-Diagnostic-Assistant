@@ -127,14 +127,21 @@ class FindDoctorsResponse(BaseModel):
 app = FastAPI(title="Chest X-ray Analysis API", version="2.0.0")  # Version bumped
 
 # Add CORS middleware for React frontend
+# ALLOWED_ORIGINS env var: comma-separated list of allowed origins.
+# Defaults to localhost for local dev. On HF Spaces, set this to your Vercel URL.
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins: list[str] = [
+    o.strip() for o in _raw_origins.split(",") if o.strip()
+] if _raw_origins else [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",  # Vite default
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -510,4 +517,6 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # PORT env var defaults to 8000 locally; HF Spaces sets it to 7860 via Dockerfile
+    _port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=_port)

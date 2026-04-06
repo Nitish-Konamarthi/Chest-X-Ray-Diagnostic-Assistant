@@ -1,0 +1,37 @@
+# .dockerignore — files excluded from Docker build context
+# Keeps the image lean and avoids uploading model files (they're downloaded at build)
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pycache
+
+# Model files (downloaded at build time from HF Hub — don't bake into image)
+models/
+
+# Environment files (secrets are set via HF Space Secrets, not .env)
+.env
+*.env
+
+# Development / test files
+*.test.py
+test_*.py
+*_test.py
+
+# Common dev files
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db

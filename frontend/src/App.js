@@ -8,7 +8,10 @@ import PathologyResults from './components/PathologyResults';
 import AIExplanationCard from './components/AIExplanationCard';
 import NearbyDoctors from './components/NearbyDoctors';
 
-const API_BASE = 'http://localhost:8000';
+// API URL is injected at build time via environment variable.
+// - Local dev  (.env.development): http://localhost:8000
+// - Production (.env.production):  https://your-space.hf.space
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
