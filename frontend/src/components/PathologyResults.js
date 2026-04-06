@@ -1,30 +1,31 @@
 import React from 'react';
+import DiseaseTag from './DiseaseTag';
 
 const getClinicalIcon = (level) => {
   switch (level) {
-    case 'HIGH':    return '🔴';
-    case 'MEDIUM':  return '🟡';
-    case 'LOW':     return '🟢';
-    default:        return '⚪';
+    case 'HIGH': return '🔴';
+    case 'MEDIUM': return '🟡';
+    case 'LOW': return '🟢';
+    default: return '⚪';
   }
 };
 
 const FindingRow = ({ pathology }) => {
   const { probability: prob, confidence_level, pathology: name } = pathology;
-  const isHigh   = confidence_level === 'HIGH';
+  const isHigh = confidence_level === 'HIGH';
   const isMedium = confidence_level === 'MEDIUM';
 
   const badge = isHigh
     ? <span className="badge badge--positive">✅ POSITIVE</span>
     : isMedium
-    ? <span className="badge badge--consider">⚠️ CONSIDER</span>
-    : <span className="badge badge--monitor">ℹ️ MONITOR</span>;
+      ? <span className="badge badge--consider">⚠️ CONSIDER</span>
+      : <span className="badge badge--monitor">ℹ️ MONITOR</span>;
 
   const confClass = isHigh ? 'conf-high' : isMedium ? 'conf-medium' : 'conf-low';
 
   return (
     <div className="finding-row">
-      <div className="finding-name">{name}{badge}</div>
+      <div className="finding-name"><DiseaseTag name={name} />{badge}</div>
       <div className="finding-prob-col">
         <div className="finding-prob-label">Probability</div>
         <div className="finding-prob">{(prob * 100).toFixed(1)}%</div>
@@ -39,9 +40,9 @@ const FindingRow = ({ pathology }) => {
 const PathologyResults = ({ pathologies, assessmentLevel, clinicalSummary }) => {
   if (!pathologies || pathologies.length === 0) return null;
 
-  const high   = pathologies.filter(p => p.confidence_level === 'HIGH');
+  const high = pathologies.filter(p => p.confidence_level === 'HIGH');
   const medium = pathologies.filter(p => p.confidence_level === 'MEDIUM');
-  const top5   = [...pathologies].sort((a, b) => b.probability - a.probability).slice(0, 5);
+  const top5 = [...pathologies].sort((a, b) => b.probability - a.probability).slice(0, 5);
 
   return (
     <div className="pathology-section">
@@ -72,7 +73,7 @@ const PathologyResults = ({ pathologies, assessmentLevel, clinicalSummary }) => 
         <h3>📊 Top Predictions</h3>
         {top5.map((p, i) => (
           <div className="pred-bar-row" key={i}>
-            <div className="pred-bar-label">#{i + 1} {p.pathology}</div>
+            <div className="pred-bar-label">#{i + 1} <DiseaseTag name={p.pathology} /></div>
             <div className="pred-bar-track">
               <div className="pred-bar-fill" style={{ width: `${p.probability * 100}%` }} />
             </div>

@@ -7,6 +7,13 @@
 *.tif
 *.tiff
 
+# Ignore ML model files (too large for GitHub — hosted on Hugging Face Hub)
+*.pth
+*.pth.tar
+*.pt
+*.ckpt
+*.bin
+
 # Ignore Python bytecode
 backend/__pycache__/
 __pycache__/
