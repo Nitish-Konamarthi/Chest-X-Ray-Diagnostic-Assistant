@@ -8,7 +8,8 @@ import React, { useState, useEffect, useCallback } from 'react';
  * Shows a "routine checkup" General Physician section for NORMAL X-ray results.
  */
 
-const API_BASE = 'http://localhost:8000';
+// Use environment variable for API URL, fallback to localhost for development
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // ── Specialty mapping (for display labels / emojis) ───────────────────────────
 const PATHOLOGY_SPECIALTY_MAP = {
