@@ -22,13 +22,17 @@ import os
 import sys
 
 def download_models():
-    hf_token = os.getenv("HF_TOKEN", "")
-    repo_id  = os.getenv("HF_REPO_ID", "")
+    hf_token = os.getenv("HF_TOKEN", "").strip()
+    repo_id  = os.getenv("HF_REPO_ID", "").strip()
 
     if not repo_id:
         print("⚠️  HF_REPO_ID not set — skipping model download.")
         print("   Models must already exist at ./models/ (e.g. mounted volume or manual upload).")
         return
+
+    # Use token only if provided; works without token for public repos
+    token = hf_token if hf_token else None
+    print(f"📦 Repo: {repo_id} | Auth: {'✅ Token set' if token else '🔓 No token (public repo)'}")
 
     try:
         from huggingface_hub import hf_hub_download
@@ -60,9 +64,9 @@ def download_models():
             downloaded = hf_hub_download(
                 repo_id=repo_id,
                 filename=remote_path,
-                repo_type="dataset",      # Change to "model" if you upload as a Model repo
-                token=hf_token or None,
-                local_dir=".",            # Download relative to current directory
+                repo_type="dataset",
+                token=token,
+                local_dir=".",
                 local_dir_use_symlinks=False,
             )
             # hf_hub_download caches in a temp dir; move to our expected path

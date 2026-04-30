@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libxrender-dev \
-    libgl1-mesa-glx \
+    libgl1 \
     git \
     wget \
     curl \
@@ -55,14 +55,6 @@ COPY download_models.py .
 # Create models directory structure
 RUN mkdir -p models/chexnet models/binary
 
-# Pre-download models at build time using the download script
-# Set HF_TOKEN as a build arg (injected from HF Space secrets during build)
-ARG HF_TOKEN=""
-ENV HF_TOKEN=${HF_TOKEN}
-
-# Download models at build time (they are cached in the image layer)
-RUN python download_models.py
-
 # HF Spaces requires port 7860
 EXPOSE 7860
 
@@ -72,5 +64,6 @@ ENV PORT=7860
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Start the FastAPI server
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+# Download models at STARTUP (not build time) so HF Space Secrets are available.
+# Secrets (HF_TOKEN, HF_REPO_ID) are injected as env vars at runtime, not during build.
+CMD ["sh", "-c", "python download_models.py && uvicorn app:app --host 0.0.0.0 --port 7860"]

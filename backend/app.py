@@ -280,6 +280,15 @@ def generate_heatmap_b64(image_rgb: Image.Image, inp: torch.Tensor) -> Optional[
 # API ENDPOINTS
 # ============================================================================
 
+@app.get("/")
+async def root():
+    """Root endpoint for status check"""
+    return {
+        "message": "Chest X-ray Analysis API is running",
+        "docs": "/docs",
+        "health": "/health"
+    }
+
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_xray(file: UploadFile = File(...)):
     """
