@@ -1,198 +1,141 @@
 # 🫁 Chest X-Ray Diagnostic Assistant
 
-An AI-powered medical diagnostic system for chest X-ray analysis with explainable AI, Grad-CAM++ heatmaps, and nearby doctor recommendations.
+An AI-powered medical diagnostic system for chest X-ray analysis, designed to be easy for developers to integrate. This package provides an end-to-end pipeline that validates X-rays, detects 14 different pathologies, generates visual heatmaps, provides clinical AI explanations, and finds nearby doctors.
 
-## 🚀 Features
+**Available on both PyPI and NPM:**
+- Python (PyPI): `pip install chest-xray-diagnosis`
+- Node.js (NPM): `npx chest-xray-diagnosis serve`
 
-- **3-Stage Binary Pipeline**: Validates images through garbage detection → chest confirmation → normal/abnormal assessment
-- **14-Pathology Detection**:  (DenseNet-121) detects conditions like Pneumonia, Cardiomegaly, Effusion, Mass, Nodule, and more
-- **Grad-CAM++ Heatmaps**: Visual overlays showing which regions the AI focused on
-- **Gemini AI Explainability**: `gemini-3.1-flash-lite` generates professional clinical explanations in natural language
-- **Nearby Doctor Recommendations**: Geoapify-powered specialist finder based on detected pathologies and the user's real location
-- **Modular React Frontend**: Clean, component-based UI with a premium medical design
+---
 
-## 🏗️ Architecture
+## 🚀 Features & What Happens Under the Hood
 
-```
-Frontend (React)  →  Backend (FastAPI)  →  AI Models         →  External APIs
-     ↓                     ↓                    ↓                      ↓
-  7 Components        REST API :8000       Binary Pipeline       Gemini 3.1 Flash Lite
-  Medical UI          Image Processing      (DenseNet)           Geoapify Places
-  Responsive UX       Heatmap Generation   Grad-CAM++ Maps
-```
+When you feed an image into this package, it automatically processes through 4 stages:
 
-## 📁 Project Structure
+1. **3-Stage Binary Pipeline (Validation)**
+   - **Model 1 (MobileNetV2):** Garbage vs. X-ray. Rejects non-medical images instantly.
+   - **Model 2 (ResNet18):** Chest vs. Other. Confirms the X-ray is actually of a chest.
+   - **Model 3 (ResNet18):** Normal vs. Abnormal. Performs an initial check. If Normal, it skips the heavy processing and generates health tips!
 
-```
-chexnet-proto/
-├── backend/
-│   ├── app.py                    # FastAPI application (main entry point)
-│   ├── requirements.txt          # Python dependencies
-│   └── src/
-│       ├── binary_pipeline.py    # 3-stage X-ray validation pipeline
-│       ├── HeatmapGenerator.py   # Grad-CAM++ heatmap generation
-│       ├── DensenetModels.py     # CheXNet model definition
-│       ├── explainability_ai.py  # Gemini AI clinical explanation
-│       └── geoapify_service.py   # Nearby doctor search (Geoapify)
-├── frontend/
-│   └── src/
-│       ├── App.js                # Root component & analysis orchestrator
-│       ├── App.css               # Global styles
-│       └── components/
-│           ├── Header.js             # App header
-│           ├── UploadSection.js      # X-ray upload & drag-drop
-│           ├── BinaryPipelineStatus.js  # Pipeline validation display
-│           ├── ImagePanel.js         # Original + heatmap side-by-side
-│           ├── PathologyResults.js   # 14-pathology confidence grid
-│           ├── AIExplanationCard.js  # Gemini AI explanation renderer
-│           └── NearbyDoctors.js      # Geoapify-powered doctor finder
-├── chexnet/                      # Original reference repo
-├── data/                         # Dataset directory
-├── scripts/                      # Utility & training scripts
-└── .env                          # API keys (not committed)
-```
+2. **CheXNet Analysis (DenseNet-121)**
+   - If the image is Abnormal, it runs through CheXNet.
+   - Detects 14 pathologies (Pneumonia, Cardiomegaly, Effusion, Mass, etc.) with probabilities and clinical thresholds.
+   - **Grad-CAM++ Heatmaps:** Automatically generates a visual heatmap (returned as a base64 PNG) showing exactly which region of the lungs the AI focused on.
 
-## 📋 Prerequisites
+3. **Gemini AI Explainability**
+   - Passes the clinical findings to **Google Gemini 3.1 Flash Lite**.
+   - Generates a warm, patient-friendly clinical explanation detailing symptoms to watch for and recommended precautions.
+   - *(Works without an API key using a comprehensive rule-based fallback system).*
 
-- Python 3.8+
-- Node.js 16+
-- CUDA-compatible GPU *(recommended for faster inference)*
-- Gemini API Key — [Get one here](https://makersuite.google.com/app/apikey)
-- Geoapify API Key — [Get one here](https://www.geoapify.com/)
+4. **Nearby Doctor Recommendations (Geoapify)**
+   - Identifies the dominant pathology (e.g., Pneumonia).
+   - Maps the pathology to a specialist (e.g., Pulmonologist).
+   - Searches the Geoapify Places API to return real doctors and clinics near the user's provided GPS coordinates.
 
-## 🔧 Setup
-
-### 1. Backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### 2. Frontend
-
-```bash
-cd frontend
-npm install
-```
-
-### 3. Environment Variables
-
-Create a `.env` file in the **root directory**:
-
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-GEOAPIFY_API_KEY=your_geoapify_api_key_here
-```
-
-> **Note:** OpenAI/ChatGPT is no longer used. The project exclusively uses `gemini-2.0-flash` for AI explanations.
-
-### 4. Run the Application
-
-```bash
-# Terminal 1 — Backend
-cd backend
-uvicorn app:app --reload --host 0.0.0.0 --port 8000
-
-# Terminal 2 — Frontend
-cd frontend
-npm start
-```
-
-Visit: **http://localhost:3000**
-
-## 🔍 How It Works
-
-### Stage 1 — Binary Pipeline (Validation)
-| Model | Task | Result |
-|-------|------|--------|
-| Model 1 | Garbage vs. X-ray | Rejects non-medical images |
-| Model 2 | Chest vs. Other X-ray | Confirms it's a chest X-ray |
-| Model 3 | Normal vs. Abnormal | Initial pathology flag |
-
-### Stage 2 — CheXNet Analysis
-- Runs DenseNet-121 trained on ChestX-ray14 dataset
-- Detects 14 pathologies with confidence scores and clinical thresholds
-- Generates **Grad-CAM++** attention heatmaps
-
-### Stage 3 — AI Explainability (Gemini)
-- Combines Model 3 + CheXNet results into a structured prompt
-- Sends to **Gemini 3.1 Flash Lite** for clinical explanation
-- Returns formatted explanation with sections: Summary, Findings, Recommendations
-
-### Stage 4 — Nearby Doctor Finder (Geoapify)
-- Detects dominant pathology from results
-- Maps pathology → specialist type (e.g., Pneumonia → Pulmonologist)
-- Uses browser geolocation to search for real nearby clinics
-- Falls back to General Physician if no specialist found
-
-## 📊 API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Health check |
-| `POST` | `/analyze` | Upload X-ray image for full analysis |
-
-### Sample Response (`/analyze`)
-
-```json
-{
-  "binary_pipeline": [
-    { "model": "Image Validation", "is_valid": true, "confidence": 0.98, "message": "Valid chest X-ray" }
-  ],
-  "valid_for_analysis": true,
-  "clinical_summary": "✅ NORMAL - No significant abnormalities detected",
-  "assessment_level": "NORMAL",
-  "pathologies": [
-    { "name": "Pneumonia", "confidence": 0.12, "is_detected": false }
-  ],
-  "heatmap_b64": "data:image/png;base64,...",
-  "ai_explanation": "## Summary\n...",
-  "doctor_recommendations": [...],
-  "processing_time_ms": 245.3
-}
-```
+---
 
 ## 🧰 Tech Stack
+- **Core AI:** PyTorch, TorchVision
+- **Models:** DenseNet-121, ResNet-18, MobileNet-V2
+- **Image Processing:** OpenCV, Pillow (PIL)
+- **API Server:** FastAPI, Uvicorn
+- **External Integrations:** Google GenAI (Gemini), Geoapify Places API
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, Vanilla CSS |
-| Backend | FastAPI, Uvicorn |
-| ML Models | PyTorch, DenseNet-121 (CheXNet) |
-| AI Explainability | Google Gemini 3.1 Flash Lite (`google-genai`) |
-| Doctor Finder | Geoapify Places API |
-| Heatmaps | Grad-CAM++, OpenCV |
+---
 
-## ⚡ Performance
+## 🔑 API Keys
 
-- Binary pipeline: ~50ms
-- CheXNet + heatmap: ~150–250ms
-- Gemini AI explanation: ~1–3s (network dependent)
-- GPU acceleration supported (CUDA)
+**The package is fully functional WITHOUT any API keys!** The ML models (binary pipeline + CheXNet + heatmaps) are 100% local. 
+However, for the best experience (AI explanations and real doctor search), you should provide keys.
 
-## 🔒 Privacy & Security
+You can configure keys in 4 ways:
+1. Interactive CLI Wizard: `chest-xray-diagnosis setup`
+2. Environment Variables: `GEMINI_API_KEY` and `GEOAPIFY_API_KEY`
+3. `.env` file in your current working directory
+4. Passed explicitly to the `ChestXRayAnalyzer` constructor in Python
 
-- All image processing is local — no images sent to external servers
-- Only text summaries are sent to Gemini for explanation
-- API keys stored in `.env` (excluded from version control via `.gitignore`)
-- No patient data is logged or persisted
+---
 
-## 🐛 Troubleshooting
+## 💻 CLI Usage
 
-| Issue | Fix |
-|-------|-----|
-| Model files not found | Ensure `.pth` files are in `backend/models/` |
-| CUDA errors | Set `device = "cpu"` in pipeline files |
-| Gemini API errors | Verify `GEMINI_API_KEY` in `.env` |
-| Geoapify returns no results | Check `GEOAPIFY_API_KEY` and confirm valid category names |
-| Frontend can't reach backend | Confirm backend is running on port `8000` |
-| CORS errors | Check `allow_origins` in `app.py` FastAPI config |
+Once installed (`pip install chest-xray-diagnosis`), you have access to a powerful CLI.
+
+### 1. Configure your keys
+```bash
+chest-xray-diagnosis setup
+```
+*Interactive prompt that securely saves your Gemini and Geoapify keys to `~/.chexray-diagnosis/.env`.*
+
+### 2. Pre-download models
+```bash
+chest-xray-diagnosis download-models
+```
+*Downloads the ~230MB of model weights from HuggingFace Hub to your local cache.*
+
+### 3. Analyze a single image directly in your terminal
+```bash
+chest-xray-diagnosis analyze path/to/chest_xray.png
+```
+**Output Example:**
+```text
+============================================================
+  Chest X-Ray Analysis Result
+============================================================
+  Status    : ⚠️ ABNORMAL — Significant findings: Infiltration, Effusion
+  Level     : ABNORMAL
+  Normal    : False
+  Time      : 343 ms
+
+  Pathology              Prob   Confidence Decision
+  ---------------------- ------ ---------- ----------
+  Infiltration           78.2%  HIGH       POSITIVE
+  Effusion               65.4%  HIGH       POSITIVE
+  Atelectasis            41.0%  MEDIUM     NEGATIVE
+  ...
+
+  AI Explanation (Gemini 3.1 Flash Lite):
+  --------------------------------------------------
+  ## 🩺 Important Findings in Your Chest X-ray
+  Your chest X-ray shows signs of **Infiltration**...
+```
+*(You can also use `--json` to output the raw JSON data).*
+
+### 4. Start the FastAPI Server
+```bash
+chest-xray-diagnosis serve --port 8000
+```
+*Starts a production-ready API server with CORS enabled. View the interactive Swagger docs at `http://localhost:8000/docs`.*
+
+---
+
+## 🐍 Programmatic Usage (Python SDK)
+
+If you are building your own Python backend, you can import the pipeline directly:
+
+```python
+from chexray_diagnosis import ChestXRayAnalyzer
+
+# Initializes the models (auto-downloads weights on first run)
+analyzer = ChestXRayAnalyzer(
+    gemini_api_key="your-key-here",    # Optional: reads from env if not provided
+    geoapify_api_key="your-key-here"   # Optional: reads from env if not provided
+)
+
+# Run end-to-end analysis
+result = analyzer.analyze("patient_xray.png")
+
+print(result["is_normal"])           # True/False
+print(result["clinical_summary"])    # "⚠️ ABNORMAL — Significant findings..."
+print(result["pathologies"])         # List of 14 pathologies + probabilities
+print(result["ai_explanation"])      # Markdown text from Gemini
+print(result["heatmap_b64"])         # Base64 encoded PNG heatmap string
+```
+
+---
 
 ## ⚠️ Medical Disclaimer
 
 This system is designed for **research and educational purposes only**. It must not be used as a substitute for professional medical diagnosis. Always consult a qualified healthcare provider for clinical decisions.
 
 ## 📄 License
-
-For educational and research use only. See individual model licenses for CheXNet model weights.
+MIT License.

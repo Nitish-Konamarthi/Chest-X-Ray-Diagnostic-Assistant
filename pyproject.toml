@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chest-xray-diagnosis"
-version = "1.0.0"
+version = "1.0.1"
 description = "AI-powered chest X-ray diagnostic assistant with CheXNet, Grad-CAM++ heatmaps, Gemini AI explanations, and nearby doctor recommendations."
 readme = "README.md"
 license = "MIT"

@@ -1,6 +1,6 @@
 {
   "name": "chest-xray-diagnosis",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI-powered chest X-ray diagnostic assistant — auto-installs the Python backend and launches the API server via npx.",
   "keywords": [
     "medical-ai",
