@@ -1,0 +1,31 @@
+{
+  "name": "chest-xray-diagnosis",
+  "version": "1.0.0",
+  "description": "AI-powered chest X-ray diagnostic assistant — auto-installs the Python backend and launches the API server via npx.",
+  "keywords": [
+    "medical-ai",
+    "chest-xray",
+    "chexnet",
+    "diagnostic",
+    "deep-learning",
+    "radiology"
+  ],
+  "author": "Nitish Konamarthi",
+  "license": "MIT",
+  "bin": {
+    "chest-xray-diagnosis": "./bin/chest-xray-diagnosis.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nitish-Konamarthi/Chest-X-Ray-Diagnostic-Assistant"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

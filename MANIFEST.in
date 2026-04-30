@@ -1,0 +1,18 @@
+include LICENSE
+include README.md
+include pyproject.toml
+include .env.example
+
+recursive-include chexray_diagnosis *.py py.typed
+
+# Exclude model weight files (auto-downloaded from HuggingFace Hub)
+recursive-exclude chexray_diagnosis *.pth *.pth.tar *.pt *.ckpt *.bin
+
+# Exclude non-package directories
+prune chexnet
+prune data
+prune scripts
+prune frontend
+prune backend
+prune docs
+prune .git
