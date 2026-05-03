@@ -31,7 +31,7 @@ chexnet-proto/
 │   └── src/
 │       ├── binary_pipeline.py    # 3-stage X-ray validation pipeline
 │       ├── HeatmapGenerator.py   # Grad-CAM++ heatmap generation
-│       ├── DensenetModels.py     # CheXNet model definition
+│       ├── DensenetModels.py     # Main  model definition
 │       ├── explainability_ai.py  # Gemini AI clinical explanation
 │       └── geoapify_service.py   # Nearby doctor search (Geoapify)
 ├── frontend/
@@ -85,7 +85,7 @@ GEMINI_API_KEY=your_gemini_api_key_here
 GEOAPIFY_API_KEY=your_geoapify_api_key_here
 ```
 
-> **Note:** OpenAI/ChatGPT is no longer used. The project exclusively uses `gemini-2.0-flash` for AI explanations.
+> **Note:** The project exclusively uses `gemini-3.1-flash-lite` for AI explanations.
 
 ### 4. Run the Application
 
@@ -110,13 +110,13 @@ Visit: **http://localhost:3000**
 | Model 2 | Chest vs. Other X-ray | Confirms it's a chest X-ray |
 | Model 3 | Normal vs. Abnormal | Initial pathology flag |
 
-### Stage 2 — CheXNet Analysis
+### Stage 2 — Main Analysis
 - Runs DenseNet-121 trained on ChestX-ray14 dataset
 - Detects 14 pathologies with confidence scores and clinical thresholds
 - Generates **Grad-CAM++** attention heatmaps
 
 ### Stage 3 — AI Explainability (Gemini)
-- Combines Model 3 + CheXNet results into a structured prompt
+- Combines Model 3 + Main model results into a structured prompt
 - Sends to **Gemini 3.1 Flash Lite** for clinical explanation
 - Returns formatted explanation with sections: Summary, Findings, Recommendations
 
@@ -167,7 +167,7 @@ Visit: **http://localhost:3000**
 ## ⚡ Performance
 
 - Binary pipeline: ~50ms
-- CheXNet + heatmap: ~150–250ms
+- Main model + heatmap: ~150–250ms
 - Gemini AI explanation: ~1–3s (network dependent)
 - GPU acceleration supported (CUDA)
 
@@ -195,4 +195,4 @@ This system is designed for **research and educational purposes only**. It must 
 
 ## 📄 License
 
-For educational and research use only. See individual model licenses for CheXNet model weights.
+For educational and research use only. See individual model licenses for model weights.
